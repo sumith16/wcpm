@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { supabase } from './supabase';
 import type { Profile } from './types';
 
@@ -14,76 +14,88 @@ const AuthContext = createContext<AuthContextType | null>(null);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
+  const initialized = useRef(false);
 
   useEffect(() => {
+    if (initialized.current) return;
+    initialized.current = true;
+    
     let mounted = true;
 
     async function initializeAuth() {
-      console.log('Starting Auth initialization...');
-      // Set a timeout to ensure loading doesn't hang forever
-      const timeoutId = setTimeout(() => {
-        if (mounted && loading) {
-          console.warn('Auth initialization timed out, forcing loading false');
-          setLoading(false);
-        }
-      }, 10000);
-
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        console.log('Auth session retrieved:', !!session);
+        const { data: { session }, error } = await supabase.auth.getSession();
         
-        if (!mounted) return;
+        if (error) {
+          console.error('Supabase getSession error:', error);
+          throw error;
+        }
 
         if (session?.user) {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', session.user.id)
-            .single();
-          
-          if (mounted) {
-            setUser(profile || null);
+          try {
+            const { data: profile, error: profileErr } = await supabase
+              .from('profiles')
+              .select('*')
+              .eq('id', session.user.id)
+              .single();
+            
+            if (profileErr) throw profileErr;
+            if (mounted) setUser(profile || null);
+          } catch (err) {
+            console.error('Profile fetch error during init:', err);
+            if (mounted) setUser(null);
           }
         } else {
-          setUser(null);
+          console.log('No session user found on init');
+          if (mounted) setUser(null);
         }
       } catch (error) {
-        console.error('Auth initialization error:', error);
+        console.error('Auth check error:', error);
+        if (mounted) setUser(null);
       } finally {
-        clearTimeout(timeoutId);
-        if (mounted) {
-          setLoading(false);
-        }
-        console.log('Auth initialization complete');
+        if (mounted) setLoading(false);
       }
     }
 
     initializeAuth();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('Auth state changed:', event);
+      if (event === 'INITIAL_SESSION') return; // Handled by initializeAuth
+      
       if (!mounted) return;
 
       if (session?.user) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', session.user.id)
-          .single();
-        
-        if (mounted) {
-          setUser(profile || null);
+        try {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', session.user.id)
+            .single();
+          if (mounted) setUser(profile || null);
+        } catch (err) {
+          console.error('Profile fetch error:', err);
         }
       } else {
-        setUser(null);
+        if (mounted) setUser(null);
       }
       
-      if (mounted) {
-        setLoading(false);
-      }
+      if (mounted) setLoading(false);
     });
+
+    // Safety timeout to prevent infinite loading
+    const timeoutId = setTimeout(() => {
+      if (mounted) {
+        setLoading((prev) => {
+          if (prev) console.warn('Auth check safety timeout triggered');
+          return false;
+        });
+      }
+    }, 3000);
 
     return () => {
       mounted = false;
+      clearTimeout(timeoutId);
       subscription.unsubscribe();
     };
   }, []);

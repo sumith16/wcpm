@@ -40,7 +40,11 @@ export default function UserManagementView() {
         const duplicate = users.find(u => u.username === form.username && u.id !== editingUser.id);
         if (duplicate) { toast.error('Username already exists'); return; }
         await dataService.updateUser(editingUser.id, {
-          full_name: form.full_name, username: form.username, dp_no: form.dp_no, role: form.role,
+          full_name: form.full_name, 
+          username: form.username, 
+          dp_no: form.dp_no, 
+          role: form.role,
+          ...(form.password.trim() ? { password: form.password } : {})
         });
         toast.success('User updated');
       } else {

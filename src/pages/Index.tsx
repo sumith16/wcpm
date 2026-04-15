@@ -13,6 +13,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Menu, Sun, Moon } from 'lucide-react';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { useIsMobile } from '@/hooks/use-mobile';
+import ScratchpadWidget from '@/components/ScratchpadWidget';
 
 const PAGE_TITLES: Record<PageView, string> = {
   dashboard: 'Dashboard', motors: 'Motor Register', powerhouse: 'Power House',
@@ -64,6 +65,7 @@ const Index = () => {
             <div><h2 className="text-sm font-semibold text-foreground">{PAGE_TITLES[currentPage]}</h2></div>
           </div>
           <div className="flex items-center gap-3">
+            <ScratchpadWidget />
             <button onClick={toggleTheme} className="p-2 rounded-md hover:bg-muted transition-colors" aria-label="Toggle theme">
               {theme === 'light' ? <Moon className="w-4 h-4 text-muted-foreground" /> : <Sun className="w-4 h-4 text-muted-foreground" />}
             </button>

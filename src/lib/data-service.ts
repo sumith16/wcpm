@@ -32,9 +32,16 @@ export const dataService = {
     return profile;
   },
 
-  async updateUser(id: string, data: Partial<{ username: string; role: 'admin' | 'technician'; full_name: string; dp_no: string }>): Promise<void> {
-    const { error } = await supabase.from('profiles').update(data).eq('id', id);
-    if (error) throw error;
+  async updateUser(id: string, data: Partial<{ username: string; role: 'admin' | 'technician'; full_name: string; dp_no: string; password?: string }>): Promise<void> {
+    const { password, ...profileData } = data;
+    if (Object.keys(profileData).length > 0) {
+      const { error } = await supabase.from('profiles').update(profileData).eq('id', id);
+      if (error) throw error;
+    }
+    if (password && password.trim().length > 0) {
+      const { error: authError } = await adminSupabase.auth.admin.updateUserById(id, { password: password.trim() });
+      if (authError) throw new Error(authError.message || 'Failed to update user password');
+    }
   },
 
   async deleteUser(id: string): Promise<void> {
