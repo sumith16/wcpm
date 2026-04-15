@@ -20,17 +20,23 @@ export default function LoginPage() {
     e.preventDefault();
     setError('');
     setIsLoading(true);
+    let hasError = false;
     try {
       const success = await login(username, password, rememberMe);
       if (!success) {
         setError('Invalid username or password');
+        hasError = true;
       }
     } catch (err: any) {
       console.error('Login error:', err);
       setError(err.message || 'An unexpected error occurred during login');
+      hasError = true;
     } finally {
-      setIsLoading(true); // Keep it loading if successful (redirecting), but we should probably reset it
-      setIsLoading(false);
+      // If there was an error, clear the loading state so the user can try again.
+      // If success, keep loading spinner active until unmounted by auth state change.
+      if (hasError) {
+        setIsLoading(false);
+      }
     }
   };
 
