@@ -19,79 +19,46 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (initialized.current) return;
     initialized.current = true;
-    
+
     let mounted = true;
 
-    async function initializeAuth() {
-      try {
-        const { data: { session }, error } = await supabase.auth.getSession();
-        
-        if (error) {
-          console.error('Supabase getSession error:', error);
-          throw error;
-        }
-
-        if (session?.user) {
-          try {
-            const { data: profile, error: profileErr } = await supabase
-              .from('profiles')
-              .select('*')
-              .eq('id', session.user.id)
-              .single();
-            
-            if (profileErr) throw profileErr;
-            if (mounted) setUser(profile || null);
-          } catch (err) {
-            console.error('Profile fetch error during init:', err);
-            if (mounted) setUser(null);
-          }
-        } else {
-          console.log('No session user found on init');
-          if (mounted) setUser(null);
-        }
-      } catch (error) {
-        console.error('Auth check error:', error);
-        if (mounted) setUser(null);
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    }
-
-    initializeAuth();
-
+    // Use onAuthStateChange as the single source of truth.
+    // It fires INITIAL_SESSION on mount (even on refresh), so we don't
+    // need a separate getSession() call which can race with it.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log('Auth state changed:', event);
-      if (event === 'INITIAL_SESSION') return; // Handled by initializeAuth
-      
       if (!mounted) return;
 
       if (session?.user) {
         try {
-          const { data: profile } = await supabase
+          const { data: profile, error: profileErr } = await supabase
             .from('profiles')
             .select('*')
             .eq('id', session.user.id)
             .single();
+          if (profileErr) throw profileErr;
           if (mounted) setUser(profile || null);
         } catch (err) {
           console.error('Profile fetch error:', err);
+          if (mounted) setUser(null);
         }
       } else {
         if (mounted) setUser(null);
       }
-      
+
       if (mounted) setLoading(false);
     });
 
-    // Safety timeout to prevent infinite loading
+    // Safety timeout — if onAuthStateChange never fires (e.g. network issue),
+    // unblock the UI after 4 seconds so users aren't stuck on the spinner.
     const timeoutId = setTimeout(() => {
       if (mounted) {
         setLoading((prev) => {
-          if (prev) console.warn('Auth check safety timeout triggered');
+          if (prev) console.warn('Auth safety timeout triggered — unblocking UI');
           return false;
         });
       }
-    }, 3000);
+    }, 4000);
 
     return () => {
       mounted = false;
